@@ -291,6 +291,11 @@ struct QRCODE {
 
 QRCODE qrcodes[] = {
   { TXT_BACK, "" },
+  {"GravityGoogle", "https://mrdoob.com/projects/chromeexperiments/google-gravity/"},
+  { "PrankHacker", "https://pranx.com/hacker/simulador/"},
+  { "TiltGoogle", "https://elgoog.es/tilt/"},
+  { "ZergRush", "https://elgoog.im/zergrush/"},
+  { "Pac-Man", "https://www.google.com/logos/2010/pacman10-i.html"},
   { "Rickroll", "https://youtu.be/dQw4w9WgXcQ"},
   { "HackerTyper", "https://hackertyper.net/"},
   { "ZomboCom", "https://html5zombo.com/"},
