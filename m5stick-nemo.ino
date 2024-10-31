@@ -221,7 +221,8 @@ const String contributors[] PROGMEM = {
   "@niximkk",
   "@unagironin",
   "@vladimirpetrov",
-  "@vs4vijay"
+  "@vs4vijay",
+  "@DrPl4g4"
 };
 
 int advtime = 0; 
