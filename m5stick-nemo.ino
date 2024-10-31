@@ -3,17 +3,17 @@
 
 // -=-=-=-=-=-=- Uncomment the platform you're building for -=-=-=-=-=-=-
 // #define STICK_C_PLUS
-// #define STICK_C_PLUS2
+ #define STICK_C_PLUS2
 // #define STICK_C
 // #define CARDPUTER
 // -=-=- Uncommenting more than one at a time will result in errors -=-=-
 
 // -=-=- NEMO Language for Menu and Portal -=- Thanks, @marivaaldo and @Mmatuda! -=-=-
-// #define LANGUAGE_EN_US
+ #define LANGUAGE_EN_US
 // #define LANGUAGE_PT_BR
 // #define LANGUAGE_IT_IT
 // #define LANGUAGE_FR_FR
-
+#include <LittleFS.h>
 // -- DEPRECATED - THESE ARE NOW EEPROM DEFINED -- //
 uint16_t BGCOLOR=0x0001; // placeholder
 uint16_t FGCOLOR=0xFFF1; // placeholder
@@ -2372,6 +2372,16 @@ void setup() {
 #if defined(BACKLIGHT)
   pinMode(BACKLIGHT, OUTPUT); // Backlight analogWrite range ~150 - 255
 #endif
+if (!LittleFS.begin()) {
+    Serial.println("LittleFS not formatted, formatting now...");
+    LittleFS.format();  // Formatear LittleFS
+    if (!LittleFS.begin()) {
+      Serial.println("Error initializing LittleFS after format.");
+      // Agregar un manejo de error aquí si es necesario
+    } else {
+      Serial.println("LittleFS formatted and initialized.");
+    }
+  }
   if(check_next_press()){
     clearSettings();
   }
